@@ -1,9 +1,9 @@
 # MCP-NX-Modeling
 
-用 Python 做一个操作 Siemens NX 建模的 MCP 服务，分阶段实现。
+![platedemo](plate.jpg)
 
 ```text
-LLM / Claude Code / Copilot  ->  MCP Server (Python)  ->  NX Adapter  ->  Siemens NX
+LLM / Claude Code / AntCode  ->  MCP Server (Python)  ->  NX Adapter  ->  Siemens NX
 ```
 
 ## 阶段路线
