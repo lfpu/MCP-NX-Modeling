@@ -1,4 +1,20 @@
 {
-  "updated": "2026-10-30T13:38:16.3475363+08:00",
-  "items": []
+  "updated": "2026-10-30T15:45:17.7189778+08:00",
+  "items": [
+    {
+      "content": "暂存当前项目修改并创建 Git commit",
+      "status": "in_progress",
+      "note": null
+    },
+    {
+      "content": "推送 main 分支到 GitHub origin",
+      "status": "pending",
+      "note": null
+    },
+    {
+      "content": "确认提交和远程同步状态",
+      "status": "pending",
+      "note": null
+    }
+  ]
 }

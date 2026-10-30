@@ -36,6 +36,46 @@ def register(mcp):
     def nx_add_to_sketch(sketch: str, shapes: List[Dict[str, Any]]) -> dict:
         return run('add_to_sketch', sketch=sketch, shapes=shapes)
 
+
+    @mcp.tool(description=(
+        '给草图几何添加约束。geometry_index/geometry_index2 是 GetAllGeometry 的从 0 开始索引。'
+        'constraint_type: horizontal/vertical/fixed/coincident/tangent/parallel/perpendicular/concentric；'
+        'point_type: none/start/end/mid/center。'))
+    def nx_sketch_add_constraint(
+        sketch: str,
+        constraint_type: str,
+        geometry_index: int,
+        geometry_index2: Optional[int] = None,
+        point_type: str = 'none',
+        point_type2: str = 'none',
+        help_point: Optional[List[float]] = None,
+        help_point2: Optional[List[float]] = None,
+    ) -> dict:
+        return run('sketch_add_constraint', sketch=sketch, constraint_type=constraint_type,
+                   geometry_index=geometry_index, geometry_index2=geometry_index2,
+                   point_type=point_type, point_type2=point_type2,
+                   help_point=help_point, help_point2=help_point2)
+
+    @mcp.tool(description=(
+        '给草图几何添加驱动或参考尺寸。dimension_type: horizontal/vertical/parallel/perpendicular/'
+        'angular/radius/diameter；origin 是尺寸文字的三维放置点；assoc_type: none/start/end/mid/center。'))
+    def nx_sketch_add_dimension(
+        sketch: str,
+        dimension_type: str,
+        geometry_index: int,
+        value: float,
+        geometry_index2: Optional[int] = None,
+        assoc_type: str = 'none',
+        assoc_type2: str = 'none',
+        origin: Optional[List[float]] = None,
+        help_point: Optional[List[float]] = None,
+        help_point2: Optional[List[float]] = None,
+        reference: bool = False,
+    ) -> dict:
+        return run('sketch_add_dimension', sketch=sketch, dimension_type=dimension_type,
+                   geometry_index=geometry_index, value=value, geometry_index2=geometry_index2,
+                   assoc_type=assoc_type, assoc_type2=assoc_type2, origin=origin,
+                   help_point=help_point, help_point2=help_point2, reference=reference)
     @mcp.tool(description='列出当前 Part 的草图（id、名称、曲线数、方向）。')
     def nx_get_sketches() -> dict:
         return run('get_sketches')

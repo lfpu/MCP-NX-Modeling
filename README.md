@@ -373,7 +373,7 @@ LLM 通常会组合 `nx_open_part`、`nx_get_part_info`、`nx_get_features`、`n
 新建一个装配，把 asm/base.prt 和 asm/plate.prt 加入装配。固定 base，然后查询两个组件可以用于贴合的平面，让 plate 的底面贴合到 base 的顶面，最后保存装配。
 ```
 
-目前 `fix + touch` 已在 NX 2412 实测通过。`concentric`、`distance`、`parallel`、`perpendicular`、`angle` 已实现但尚未全部完成实机验证，使用这些约束时建议让 AI 在操作后重新查询组件位置或测量距离进行校验。
+`fix`、`touch`、`concentric`、`distance`、`parallel`、`perpendicular` 和 `angle` 均已在 NX 2412 实机提交并保存成功。装配求解后仍建议让 AI 重新查询组件位置、相关面或距离，对最终几何状态做二次校验。
 
 ### 9. 出图和导出示例
 
@@ -389,7 +389,7 @@ LLM 通常会组合 `nx_open_part`、`nx_get_part_info`、`nx_get_features`、`n
 把当前零件同时导出 STEP、IGES 和 STL 到 output 目录。
 ```
 
-工程图创建及 PDF 导出、STEP/IGES/STL 导出已经在 NX 2412 实测。STEP 导入目前仍属于待补测能力。
+工程图创建及 PDF 导出、STEP/IGES/STL 导出已经在 NX 2412 实测。STEP 导入也已完成导出再导入回环测试，导入前后实体体积均为 `9216 mm³`。
 
 ### 10. 出错时怎么处理
 
@@ -427,7 +427,7 @@ python scripts/stop_worker.py
 ```
 
 这种方式比逐个指定 `nx_*` Tool 更适合作为日常操作方式，因为 LLM 可以根据 NX 返回的对象 ID、几何信息和错误动态决定下一步。
-- 拔模、剖视图、尺寸标注、装配的更多约束组合尚未实现。
+- 拔模、剖视图和工程图尺寸标注尚未实现；装配已支持并实测 `fix`、`touch`、`concentric`、`distance`、`parallel`、`perpendicular` 和 `angle`，但复杂多约束组合仍建议在求解后重新查询几何状态。
 - worker 单线程串行处理请求，长时间操作期间其他请求会排队。
 
 ### 开发提示：改完 nx_worker 代码要重启 worker
@@ -442,15 +442,17 @@ NX 里的 worker 是常驻进程，已加载的模块不会自动刷新。修改
 | --- | --- | --- |
 | 工作区 | nx_set_workspace / nx_get_workspace | 通过 |
 | 草图在面上、拉伸、切除 | nx_create_sketch(face=...) / nx_extrude / nx_pocket | 通过，按体积校验 |
+| 原生孔 | `nx_hole_native` | Simple Through、Simple Blind、Counterbored、Countersink 均生成原生 `HOLE PACKAGE`；支持失败时回退布尔减孔 |
+| 草图约束与尺寸 | `nx_sketch_add_constraint` / `nx_sketch_add_dimension` | 水平、垂直、重合、水平长度、垂直长度、半径、直径已在 NX 2412 实测通过 |
 | 抽壳 | nx_shell | 通过，按体积校验 |
-| 特征阵列 | nx_pattern_feature（线性） | 通过，按体积校验；网格、圆形未单独测试 |
+| 特征阵列 | `nx_pattern_feature`（线性 / 网格 / 圆形） | 通过；3×2 网格阵列生成 6 个 Body，四实例 360° 圆形阵列生成 4 个 Body |
 | 镜像 | nx_mirror_body | 通过，按尺寸校验 |
 | 抑制、重命名、基准轴 | nx_suppress_feature / nx_rename_object / nx_create_datum_axis | 通过 |
 | 测量 | nx_mass_properties / nx_measure_distance | 通过（面到面距离走 NX 精确测量） |
-| 导入导出 | nx_export_step / nx_export_iges / nx_export_stl / nx_import_step | 导出通过；STEP 导入未测试 |
+| 导入导出 | `nx_export_step` / `nx_export_iges` / `nx_export_stl` / `nx_import_step` | STEP / IGES / STL 导出通过；STEP 导入回环通过，导入前后体积均为 `9216 mm³` |
 | 撤销与确认 | nx_undo_last / 危险操作 confirm | 通过 |
 | 工程图 | nx_create_drawing_sheet / nx_add_base_view / nx_add_projected_view / nx_export_drawing_pdf | 通过，生成了 PDF |
-| 装配约束 | nx_component_faces / nx_add_constraint | fix + touch 通过；concentric、distance、parallel、perpendicular、angle 未测试 |
+| 装配约束 | `nx_component_faces` / `nx_add_constraint` | `fix`、`touch`、`concentric`、`distance`、`parallel`、`perpendicular`、`angle` 均已在 NX 2412 提交并保存成功 |
 
 ### 开发经验（NX 2412）
 
@@ -458,3 +460,87 @@ NX 里的 worker 是常驻进程，已加载的模块不会自动刷新。修改
 - 选择类对象（如镜像的 `Plane`、投影视图的 `Parent.View`）本身只读，要设置它的 `.Value`。
 - Builder 的 `Null` 要用对应类型（基本视图用 `Drawings.BaseView.Null`，投影视图用 `Drawings.ProjectedView.Null`）。
 - 草图的平面参照必须是 Plane，不能直接传 Face；在面上建草图时用该面生成的基准平面（因此与面不关联）。
+
+
+## NX 2412 最新实测状态
+
+以下测试均由系统 Python 通过 TCP 调用常驻 NX Worker。修改 `nx_worker/` 后必须先执行 `python scripts/stop_worker.py`，避免继续运行旧代码。
+
+| 测试脚本 | 覆盖内容 | 结果 |
+| --- | --- | --- |
+| `examples/smoke_test.py` | 底板、圆角、通孔、保存 | 通过 |
+| `examples/smoke_advanced.py` | 抽壳、镜像、线性阵列、测量、导出、工程图等 | 13/13 通过 |
+| `examples/smoke_assembly.py` | `fix + touch` 装配约束 | 通过，板件底面落到 `z=10.0000` |
+| `examples/smoke_native.py` | 原生孔、草图约束与尺寸、网格阵列、圆形阵列 | 通过，日志结尾为 `ALL_NATIVE_SMOKE_TESTS_PASSED` |
+| `scripts/test_remaining_features.py` | 倒斜角、旋转、STEP 导出导入回环 | 通过；旋转体积 `14074.3351 mm³`，STEP 导入前后体积 `9216 mm³` |
+| `scripts/test_assembly_constraints.py` | `parallel`、`perpendicular`、`distance`、`angle`、`concentric` | 全部通过，日志结尾为 `ASSEMBLY_CONSTRAINT_TESTS_PASSED` |
+
+### 原生孔 `nx_hole_native`
+
+支持以下原生 NX `HOLE PACKAGE` 类型：
+
+- `hole_form="simple"`：简单孔。
+- `hole_form="counterbore"`：沉孔，需要 `cbore_diameter` 和 `cbore_depth`。
+- `hole_form="countersink"`：锥形沉孔，需要 `csink_diameter`，可设置 `csink_angle`。
+- `through=true` 创建贯穿孔，否则使用 `depth` 创建盲孔。
+- `fallback=true` 时，原生接口失败会回退到已有布尔减孔实现；设置 `fallback=false` 可要求必须创建原生 Hole 特征。
+
+已验证 D10 贯穿 20 mm 实体时移除体积为 `1570.7963 mm³`，与理论值一致。
+
+### 草图约束与尺寸
+
+`nx_sketch_add_constraint` 支持：
+
+- `horizontal`
+- `vertical`
+- `fixed`
+- `coincident`
+- `tangent`
+- `parallel`
+- `perpendicular`
+- `concentric`
+
+`nx_sketch_add_dimension` 支持：
+
+- `horizontal`
+- `vertical`
+- `parallel`
+- `perpendicular`
+- `angular`
+- `radius`
+- `diameter`
+
+几何通过从 0 开始的 `geometry_index` 引用。端点关联可以使用 `start`、`end`、`mid`、`center`。角度输入使用度，内部创建弧度单位的 NX 系统表达式；其他尺寸使用毫米单位表达式。
+
+注意：修改草图中的几何对象后，`Sketch.GetAllGeometry()` 的索引可能变化。继续添加约束或尺寸前，应重新确认几何顺序。
+
+### STEP 导入实现
+
+NX 2412 在 `run_journal` 批处理会话中，`Step214Importer` 的 `NewPart + OutputFile` 不保证直接保存目标文件。当前实现采用：
+
+1. `ImportTo=NewPart`。
+2. `FileOpenFlag=true`，让转换生成的新 Part 成为当前工作 Part。
+3. `ProcessHoldFlag=true`，等待转换完成。
+4. 导入后对当前工作 Part 执行 `SaveAs(output_part)`。
+
+该路径已经通过 STEP 导出再导入回环和实体体积一致性验证。
+
+### 当前已知限制
+
+- 面上草图通过目标平面创建固定基准平面，暂不与原始面保持参数化关联。
+- 拔模、剖视图和工程图尺寸标注尚未实现。
+- 曲面包围盒主要通过边顶点估算，复杂自由曲面应结合 NX 精确测量结果判断。
+- NX Tag 对象 ID 只在当前 NX 会话有效；重启 Worker 或重新打开 Part 后必须重新查询。
+- Worker 单线程串行处理请求，长时间导入导出或复杂更新期间其他请求会排队。
+- 装配约束虽已逐项实测通过，复杂多约束组合仍可能出现过约束、欠约束或不同求解分支，应在求解后重新查询组件位置、相关面及距离。
+
+### 最终验证命令
+
+```powershell
+python scripts/stop_worker.py
+python -m compileall nx_worker nx_mcp examples scripts
+python scripts/check_registry.py
+python examples/smoke_native.py
+python scripts/test_remaining_features.py
+python scripts/test_assembly_constraints.py
+```

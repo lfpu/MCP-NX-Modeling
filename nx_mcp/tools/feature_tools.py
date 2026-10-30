@@ -69,6 +69,28 @@ def register(mcp):
         return run('create_hole', face=face, positions=positions, diameter=diameter, depth=depth, through=through,
                    cbore_diameter=cbore_diameter, cbore_depth=cbore_depth, csink_diameter=csink_diameter, csink_angle=csink_angle)
 
+
+    @mcp.tool(description=(
+        '创建 NX 原生 HolePackage 孔特征。hole_form: simple / counterbore / countersink / tapered；'
+        'positions 为投影到目标平面的绝对坐标点。through=true 为贯穿孔，否则需要 depth。'
+        '原生接口失败时默认回退到现有布尔减孔；fallback=false 可禁止回退并返回原始错误。'))
+    def nx_hole_native(
+        face: str,
+        positions: List[List[float]],
+        diameter: float,
+        depth: Optional[float] = None,
+        through: bool = False,
+        hole_form: str = 'simple',
+        cbore_diameter: Optional[float] = None,
+        cbore_depth: Optional[float] = None,
+        csink_diameter: Optional[float] = None,
+        csink_angle: float = 90.0,
+        fallback: bool = True,
+    ) -> dict:
+        return run('hole_native', face=face, positions=positions, diameter=diameter, depth=depth,
+                   through=through, hole_form=hole_form, cbore_diameter=cbore_diameter,
+                   cbore_depth=cbore_depth, csink_diameter=csink_diameter,
+                   csink_angle=csink_angle, fallback=fallback)
     @mcp.tool(description='对已有实体做布尔运算。operation: unite / subtract / intersect；target 和 tools 都是 BODY id。')
     def nx_boolean(operation: str, target: str, tools: List[str]) -> dict:
         return run('boolean', operation=operation, target=target, tools=tools)

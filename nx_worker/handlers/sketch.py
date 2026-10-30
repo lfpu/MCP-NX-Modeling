@@ -287,6 +287,157 @@ def add_to_sketch(sketch, shapes):
     return {'sketch': sketch_info(sk)}
 
 
+
+
+def _sketch_geometry(sketch, index):
+    geometry = list(sketch.GetAllGeometry())
+    i = int(index)
+    if i < 0 or i >= len(geometry):
+        raise ctx.NxError('geometry_index %s 超出范围，草图共有 %s 个几何对象' % (i, len(geometry)))
+    return geometry[i]
+
+
+def _constraint_geometry(geometry, point_type='none'):
+    data = NXOpen.Sketch.ConstraintGeometry()
+    data.Geometry = geometry
+    names = {
+        'none': 'NotSet',
+        'notset': 'NotSet',
+        'start': 'StartVertex',
+        'end': 'EndVertex',
+        'mid': 'MidVertex',
+        'center': 'ArcCenter',
+        'arc_center': 'ArcCenter',
+    }
+    key = str(point_type or 'none').lower()
+    if key not in names:
+        raise ctx.NxError('point_type 只能是 none/start/end/mid/center')
+    data.PointType = getattr(NXOpen.Sketch.ConstraintPointType, names[key])
+    data.SplineDefiningPointIndex = 0
+    return data
+
+
+def _dimension_geometry(geometry, assoc_type='none', help_point=None):
+    data = NXOpen.Sketch.DimensionGeometry()
+    data.Geometry = geometry
+    assoc_names = {
+        'none': 'NotSet',
+        'start': 'StartPoint',
+        'end': 'EndPoint',
+        'mid': 'MidPoint',
+        'center': 'Center',
+        'arc_center': 'Center',
+    }
+    key = str(assoc_type or 'none').lower()
+    if key not in assoc_names:
+        raise ctx.NxError('assoc_type 只能是 none/start/end/mid/center')
+    data.AssocType = getattr(NXOpen.Sketch.AssocType, assoc_names[key])
+    data.AssocValue = 0
+    hp = help_point or [0.0, 0.0, 0.0]
+    data.HelpPoint = NXOpen.Point3d(float(hp[0]), float(hp[1]), float(hp[2]))
+    data.View = NXOpen.NXObject.Null
+    return data
+
+
+def _dimension_option(reference):
+    return NXOpen.Sketch.DimensionOption.CreateAsReference if reference else NXOpen.Sketch.DimensionOption.CreateAsDriving
+
+
+@command('sketch_add_constraint', 'modify')
+def sketch_add_constraint(sketch, constraint_type, geometry_index, geometry_index2=None,
+                          point_type='none', point_type2='none', help_point=None, help_point2=None):
+    sk = ctx.get_obj(sketch, 'SKETCH')
+    kind = str(constraint_type or '').lower()
+    sk.Activate(NXOpen.Sketch.ViewReorient.FalseValue)
+    g1 = _sketch_geometry(sk, geometry_index)
+    c1 = _constraint_geometry(g1, point_type)
+    one = {
+        'horizontal': 'CreateHorizontalConstraint',
+        'vertical': 'CreateVerticalConstraint',
+        'fixed': 'CreateFixedConstraint',
+    }
+    two = {
+        'coincident': 'CreateCoincidentConstraint',
+        'parallel': 'CreateParallelConstraint',
+        'perpendicular': 'CreatePerpendicularConstraint',
+        'concentric': 'CreateConcentricConstraint',
+    }
+    if kind in one:
+        constraint = getattr(sk, one[kind])(c1)
+    elif kind in two:
+        if geometry_index2 is None:
+            raise ctx.NxError('%s 约束需要 geometry_index2' % kind)
+        c2 = _constraint_geometry(_sketch_geometry(sk, geometry_index2), point_type2)
+        constraint = getattr(sk, two[kind])(c1, c2)
+    elif kind == 'tangent':
+        if geometry_index2 is None:
+            raise ctx.NxError('tangent 约束需要 geometry_index2')
+        c2 = _constraint_geometry(_sketch_geometry(sk, geometry_index2), point_type2)
+        hp1 = help_point or [0.0, 0.0, 0.0]
+        hp2 = help_point2 or [0.0, 0.0, 0.0]
+        constraint = sk.CreateTangentConstraint(
+            c1, NXOpen.Point3d(float(hp1[0]), float(hp1[1]), float(hp1[2])),
+            c2, NXOpen.Point3d(float(hp2[0]), float(hp2[1]), float(hp2[2])))
+    else:
+        raise ctx.NxError('constraint_type 只能是 horizontal/vertical/fixed/coincident/tangent/parallel/perpendicular/concentric')
+    sk.LocalUpdate()
+    sk.Deactivate(NXOpen.Sketch.ViewReorient.FalseValue, NXOpen.Sketch.UpdateLevel.Model)
+    return {
+        'sketch': sketch_info(sk),
+        'constraint_type': kind,
+        'constraint': ctx.oid(constraint) if constraint is not None else None,
+    }
+
+
+@command('sketch_add_dimension', 'modify')
+def sketch_add_dimension(sketch, dimension_type, geometry_index, value,
+                         geometry_index2=None, assoc_type='none', assoc_type2='none',
+                         origin=None, help_point=None, help_point2=None, reference=False):
+    sk = ctx.get_obj(sketch, 'SKETCH')
+    kind = str(dimension_type or '').lower()
+    sk.Activate(NXOpen.Sketch.ViewReorient.FalseValue)
+    g1 = _sketch_geometry(sk, geometry_index)
+    d1 = _dimension_geometry(g1, assoc_type, help_point)
+    pos = origin or [0.0, 0.0, 0.0]
+    dim_origin = NXOpen.Point3d(float(pos[0]), float(pos[1]), float(pos[2]))
+    option = _dimension_option(bool(reference))
+    part = ctx.work_part()
+    numeric_value = float(value)
+    if kind == 'angular':
+        unit = part.UnitCollection.FindObject('Radian')
+        expression = part.Expressions.CreateSystemExpressionWithUnits(ctx.num(math.radians(numeric_value)), unit)
+    else:
+        unit = part.UnitCollection.FindObject('MilliMeter')
+        expression = part.Expressions.CreateSystemExpressionWithUnits(ctx.num(numeric_value), unit)
+    if kind == 'radius':
+        dimension = sk.CreateRadialDimension(d1, dim_origin, expression, option)
+    elif kind == 'diameter':
+        dimension = sk.CreateDiameterDimension(d1, dim_origin, expression, option)
+    else:
+        dim_types = {
+            'horizontal': 'HorizontalDim',
+            'vertical': 'VerticalDim',
+            'parallel': 'ParallelDim',
+            'perpendicular': 'PerpendicularDim',
+            'angular': 'AngularDim',
+        }
+        if kind not in dim_types:
+            raise ctx.NxError('dimension_type 只能是 horizontal/vertical/parallel/perpendicular/angular/radius/diameter')
+        if geometry_index2 is None:
+            d2 = NXOpen.Sketch.DimensionGeometry()
+        else:
+            d2 = _dimension_geometry(_sketch_geometry(sk, geometry_index2), assoc_type2, help_point2)
+        dimension = sk.CreateDimension(getattr(NXOpen.Sketch.ConstraintType, dim_types[kind]), d1, d2, dim_origin, expression, option)
+    sk.LocalUpdate()
+    sk.Deactivate(NXOpen.Sketch.ViewReorient.FalseValue, NXOpen.Sketch.UpdateLevel.Model)
+    return {
+        'sketch': sketch_info(sk),
+        'dimension_type': kind,
+        'dimension': ctx.oid(dimension) if dimension is not None else None,
+        'expression': ctx.oid(expression) if expression is not None else None,
+        'value': float(value),
+        'reference': bool(reference),
+    }
 @command('get_sketches', 'read')
 def get_sketches():
     part = ctx.work_part()

@@ -1,134 +1,140 @@
 Copilot said:
 项目概况
 项目名称：MCP-NX-Modeling
-目标：用 Python 实现可供 AntCode、Claude Code 等客户端调用的 Siemens NX 建模 MCP 服务。
-当前环境：
+目标：使用 Python 构建 Siemens NX 建模 MCP 服务，供 AntCode、Claude Code 等客户端通过自然语言调用 NX 完成建模、查询、装配、工程图和格式导入导出。
+运行环境：
 Siemens NX 2412
 NX 内置 Python 3.11
 系统 Python 3.12
 MCP Python SDK 2.3.0
 架构：
-main.py / nx_mcp/：运行在系统 Python 中的 MCP Server。
-nx_worker/：通过 run_journal.exe 启动并常驻于 NX 内部。
-MCP Server 通过本地 TCP 127.0.0.1:8765 调用 NX Worker。
-此设计避免每次 Tool 调用都重新启动 NX。
-对象标识：使用 FACE_123、EDGE_45、BODY_7、FEATURE_8 等基于 NX Tag 的 ID，仅在当前 NX 会话内有效。
-状态：Phase 0 至 Phase 7 已实现。语法检查、Tool/Worker 注册一致性检查以及基础零件冒烟测试已通过，但大部分高级 NX Tool 尚未逐项实机验证。
+main.py、nx_mcp/：运行于系统 Python 的 MCP Server。
+nx_worker/：由 run_journal.exe 启动并常驻 NX 内部。
+MCP Server 通过 TCP 127.0.0.1:8765 调用 Worker，避免每次 Tool 调用都重启 NX。
+对象标识：使用 FACE_123、EDGE_45、BODY_7、FEATURE_8 等 NX Tag ID，仅在当前 NX 会话有效。
+代码仓库：已初始化 Git，并推送到公开 GitHub 仓库 lfpu/MCP-NX-Modeling，默认分支为 main。
+当前状态：基础建模、高阶特征、查询选择、装配、工程图、测量和格式转换链路已经建立，AntCode 已能正常连接和调用。
 已完成的工作
-基础架构与 Phase 0
-完成 MCP Server、TCP Client、NX Worker、命令分发、Handler 注册及自动启动机制。
-完成 Phase 0 NXOpen 技术验证，生成：
-phase0/output/phase0_block.prt
-phase0/output/result.json
-Worker 未运行时，MCP 层可通过 NX run_journal.exe 自动拉起。
+核心架构
+完成 MCP Server、TCP Client、NX Worker、Handler 注册和命令分发。
+支持 Worker 自动启动、Token 校验、NX 会话复用和单线程串行执行。
+Phase 0 NXOpen 技术验证已通过。
 建模操作使用 Undo Mark，失败时回滚；nx_undo_last 最多保留最近 20 步。
-删除对象、放弃修改并关闭 Part 等危险操作要求 confirm=true。
-Phase 1 至 Phase 7
-Part 管理：状态、新建、打开、保存、另存、关闭。
-基本体素：长方体、圆柱、圆锥、球。
-模型查询：Part 信息、Body、特征树、表达式、面、边、对象详情、NX 界面当前选择。
-草图与特征：
-直线、矩形、圆、圆弧、折线
-拉伸、切除、旋转
-通孔、盲孔、沉头孔、锥形沉孔
-高级特征：布尔运算、圆角、倒斜角、基准面、修改表达式、孔阵列坐标生成。
-几何选择：
-按类型、法向、方向、面积、半径、范围、距离和最外侧等条件筛选面或边
-查询相邻面
-主要在 Worker 的 Python 层筛选，只返回少量结果，减少 LLM Token 消耗
-装配：添加组件、读取组件、平移组件。
-共实现约 38 个 Worker 命令和 40 处 MCP Tool 调用。
-scripts/check_registry.py 已验证 Tool 名称、Worker 命令和参数一致。
-针对输出过长问题，将 Feature Handler 拆为：
-feat_sweep.py
-feat_hole.py
-feat_edge.py
-feat_misc.py
-NX 2412 兼容修复
-NXOpen.Utilities 和 NXOpen.Assemblies 改为可选导入，避免 NX 2412 启动时报错。
-对象 Tag 解析优先使用 NXOpen.TaggedObjectManager.GetTaggedObject()，并保留兼容回退。
-处理 NX 枚举字符串表现为数字的问题，加入枚举名称反查和几何兜底判断。
-NX 2412 的 UF.Modeling 没有 AskBoundingBox，现改用边顶点计算包围盒。
-平面法向优先使用 AskFaceData，不可用时通过顶点信息兜底。
-Worker 为常驻进程，修改代码后必须重启。已新增 scripts/stop_worker.py，冒烟测试也会先关闭旧 Worker。
-冒烟测试结果
+删除对象、放弃修改等危险操作要求 confirm=true。
+建模与查询
 
-python examples/smoke_test.py 已成功完成：
+已实现：
 
-创建 120 × 80 × 15 底板
-找到 4 条竖直边
-创建 R10 圆角
-创建四个 Ø8 通孔
-创建一个中央 Ø40 通孔
-保存为 examples/output/plate.prt
+Part 新建、打开、保存、另存、关闭和状态查询。
+长方体、圆柱、圆锥、球。
+直线、矩形、圆、圆弧和折线草图。
+拉伸、切除、旋转、布尔、孔、圆角、倒斜角、基准面和表达式修改。
+抽壳、线性特征阵列、镜像实体、抑制/解抑制、重命名和基准轴。
+Body、特征树、表达式、面、边、对象信息和当前选择查询。
+按几何条件筛选面/边，以及查询相邻面。
+体积、表面积、质心和距离测量。
+STEP、IGES、STL 导出及 STEP 导入。
+装配与工程图
+支持添加、读取、平移装配组件。
+支持固定、接触/贴合、同心、距离、平行、垂直和角度装配约束。
+已实测固定和贴合约束，贴合后板件底面为 z=10.0000。
+支持新建图纸、基本视图、投影视图和导出 PDF。
+验证情况
+examples/smoke_test.py 基础测试已通过。
+examples/smoke_advanced.py 13 项全部通过。
+examples/smoke_assembly.py 已通过。
+已验证抽壳体积为 22428 mm³。
+examples/output/ 中保留了 Part、装配、STEP、IGES、STL、PDF 和日志等实测产物。
+NX 2412 兼容处理
+NXOpen.Utilities、NXOpen.Assemblies 使用可选导入。
+Tag 优先通过 TaggedObjectManager.GetTaggedObject() 解析。
+针对枚举显示为数字的情况加入名称反查和几何兜底。
+包围盒通过边顶点计算，平面法向优先使用 AskFaceData。
+NXOpen Builder 的真实属性和方法通过 probe_api*.py 实机探测，不依赖猜测。
+README 和使用说明
 
-结果文件已生成，但仍建议在 NX GUI 中人工检查圆角和孔的实际几何形状。
+README.md 已包含面向 AntCode / Claude Code 使用者的完整教程：
 
-MCP 2.3.0 兼容
-nx_mcp/server.py 已兼容：
-MCP 2.x：MCPServer
-MCP 1.x：回退到 FastMCP
-scripts/list_tools.py 已在 MCP 2.3.0 环境运行成功，证明 Tool 可完成注册。
-尚需继续验证 AntCode 与 MCP Server 的完整 stdio 握手和实际 Tool 调用。
+环境安装及 NX_MCP_NXBIN 配置。
+AntCode、Claude Code 和 .mcp.json.example 配置。
+Worker 自动启动机制。
+NX_MCP_WORKSPACE、nx_set_workspace 和路径规则。
+Part 创建、体素建模、面边查找、打孔、圆角、保存等自然语言示例。
+“底板 + 四孔 + R3 圆角 + 工程图 + PDF”端到端 Demo。
+Part 修改、撤销、危险操作确认、装配和格式导出示例。
+Worker 重启和常见错误排查。
+
+README 当前已经足以指导首次配置和基本使用，但前半部分的开发路线、Tool 清单和状态说明存在过时内容，需要后续统一整理。
+
 关键文件与说明
 main.py：MCP 服务入口。
-nx_mcp/server.py：创建 MCP Server，兼容 MCP 1.x/2.x。
-nx_mcp/client.py：TCP 请求转发、错误处理及 Worker 自动启动。
-nx_mcp/config.py：服务、Worker 和 NX 路径配置。
-nx_mcp/tools/：按 Part、Primitive、Query、Selection、Sketch、Feature、Pattern、Assembly 分类的 MCP Tool。
-nx_worker/main.py：NX Journal/Worker 入口。
-nx_worker/server.py：TCP Worker 服务。
-nx_worker/dispatch.py、registry.py：命令分发与注册。
-nx_worker/ctx.py：NX Session、Part、Undo、对象 Tag 解析等公共上下文。
-nx_worker/geom.py：几何信息提取、枚举兼容、边面判断和包围盒逻辑。
-nx_worker/handlers/：具体 NXOpen 操作。
-examples/smoke_test.py：直接调用 Worker 的基础实机验证，不依赖 MCP 客户端。
-scripts/check_registry.py：检查 MCP Tool 与 Worker Handler 的名称及参数一致性。
-scripts/list_tools.py：不启动 NX，仅测试 MCP Tool 注册。
-scripts/probe.py、handlers/debug.py：NX API 探针与调试。
-scripts/start_worker.ps1、stop_worker.py：启动和关闭常驻 Worker。
-.mcp.json.example：MCP 客户端配置示例。
-logs/nx_worker.log、logs/run_journal.log：排查 NX 和 Journal 启动问题的主要日志。
-shuriken.prt：当前位于项目根目录，暴露了相对路径依赖当前工作目录的问题。
+nx_mcp/server.py：兼容 MCP 2.x MCPServer 和 MCP 1.x FastMCP。
+nx_mcp/client.py：TCP 调用、错误处理和 Worker 自动启动。
+nx_mcp/config.py：NX 路径、端口、Token、工作区和自动启动配置。
+nx_mcp/tools/：MCP Tool 定义，按 Part、体素、查询、选择、草图、特征、阵列、装配约束、工程图等分类。
+nx_worker/ctx.py：NX Session、Part、Undo、Tag 解析和公共上下文。
+nx_worker/geom.py：几何提取及 NX 2412 兼容逻辑。
+nx_worker/dispatch.py、registry.py：命令分发和 Handler 注册。
+nx_worker/handlers/：具体 NXOpen 实现。
+examples/smoke_test.py：基础零件测试。
+examples/smoke_advanced.py：高阶功能测试。
+examples/smoke_assembly.py：装配测试。
+scripts/check_registry.py：检查 MCP Tool、Worker 命令和参数一致性。
+scripts/list_tools.py：无需启动 NX 即可检查 Tool 注册。
+scripts/start_worker.ps1、stop_worker.py：启动和关闭 Worker。
+scripts/probe_api*.py：NX 2412 API 实机探针。
+logs/probe*.txt：探针输出。
+logs/nx_worker.log、run_journal.log：主要运行日志。
+phase0/：NXOpen 技术验证脚本和输出。
+images/：README 使用的 MCP 和零件示意图。
 约定与用户偏好
-面向用户当前使用的 NX 2412 做兼容，出现错误后依据真实日志逐项调整，不假设其他版本 API 一定一致。
-多步骤开发应使用 Todo 分阶段推进，并在修改后立即执行语法检查、注册检查或实机验证。
-优先沿用现有 MCP Server + 常驻 NX Worker 架构，不随意引入无关抽象。
-文件操作语义应明确：
-open_part(path)：必须提供路径。
-save_part()：保存回当前 Part 已有路径。
-save_part_as(path)：必须提供目标路径。
-new_part：建议要求路径或基于显式工作区解析。
-NX Part 路径不应隐式依赖 MCP Server 或 NX Worker 的当前工作目录。
-工具返回应始终包含规范化后的绝对路径。
-修改 nx_worker/ 后，要先停止旧 Worker 再验证，避免继续运行旧代码。
+以 NX 2412 实机日志和探针结果为准，不猜测其他版本 API。
+探针必须将完整输出写入日志并读取后，才能确认接口属性或方法签名。
+多步骤任务使用 Todo，且同一时间只能有一项 in_progress。
+修改后立即执行 compileall、scripts/check_registry.py 和对应实机冒烟测试。
+修改 nx_worker/ 后必须先停止旧 Worker，避免测试旧代码。
+保持“MCP Server + 常驻 NX Worker”架构，不引入无关抽象。
+路径解析顺序：绝对路径 > 显式工作区 > NX_MCP_WORKSPACE，禁止回退到当前工作目录。
+Tool 返回规范化绝对路径。
+open_part(path)、save_part_as(path) 必须显式提供路径；save_part() 保存到现有路径。
+冒烟测试需要按真实几何、位置和体积校验，避免期望值错误导致误判。
+用户偏好直接修改项目并执行验证，不希望只给方案。
+.gitignore 应忽略生成的 Part、日志、测试输出、缓存、虚拟环境及整个 .antcode/ 目录。
 未完成 / 下一步
-
-优先修复工作区路径机制：
-
-新增显式工作区概念。
-建议提供 set_workspace(path)、get_workspace()。
-路径解析优先级：绝对路径 > Tool 显式设置的工作区 > NX_MCP_WORKSPACE。
-没有工作区时，相对路径应报错，不能回退到 cwd。
-AntCode 启动服务时应注入当前项目根目录，如通过 NX_MCP_WORKSPACE 或 ${project} 变量。
-检查 new_part、open_part、save_part_as 的全部路径处理。
-
-验证 AntCode 与 MCP 2.3.0 服务的 stdio 连接、Tool 列表获取和实际调用。
-
-分阶段实测高级 Tool：
-
-草图与拉伸
-切除、旋转、孔
-布尔、倒角、基准面、表达式
-撤销和危险操作确认
-装配功能
-
-稳定后移除或关闭 smoke_test.py 中的大段调试探针输出。
-
-已知限制：
-孔目前通过圆柱或圆锥布尔减实现，不是原生 NX Hole Feature。
-草图暂不支持几何约束和尺寸标注，只按精确坐标绘制。
-未实现特征阵列、镜像、装配约束、工程图。
-Worker 单线程，请求串行处理。
-曲面包围盒由顶点估算，对圆孔面和圆角面不完全精确。
-返回的 units: "1" 是 NX 枚举数字显示问题，目前仅影响可读性。
+第一优先级：补齐原生建模能力
+继续基于 probe8.txt、probe9.txt 探测实例对象和真实方法签名。
+实现原生 nx_hole_native：
+简单孔
+沉孔
+锥形沉孔
+Through Body、Until Next、Until Selected、Value 深度限制
+在目标面上正确定位
+原生接口失败时可回退到现有布尔减孔
+实现草图约束：
+水平、垂直、重合、相切、平行、正交、同心、固定
+实现草图尺寸：
+长度、半径、直径
+补全圆形阵列和网格阵列。
+新增 examples/smoke_native.py，停止旧 Worker 后执行实机验证。
+README 整理
+更新过时的 Phase 路线状态。
+补齐工程图、测量、工作区、格式转换、装配约束等 Tool 清单。
+明确区分：
+已实现且实机通过
+已实现但尚未完整实机验证
+尚未实现
+修复损坏的 AntCode 仓库链接。
+新功能完成后补入使用教程和端到端 Demo。
+待补测与已知限制
+补测同心、距离、平行、垂直和角度装配约束。
+补测 STEP 导入、倒斜角、旋转、撤销和危险操作确认。
+执行 AntCode 建模、保存、工程图及 PDF 导出的完整端到端 Demo。
+当前孔主要通过圆柱或圆锥布尔减实现，并非原生 NX Hole Feature。
+草图约束和尺寸尚未形成正式 Tool。
+面上草图通过目标面生成基准平面，暂不与原面保持关联。
+尚未实现拔模、剖视图和工程图尺寸标注。
+曲面包围盒仍为顶点估算值。
+units: "1" 是 NX 枚举显示问题，仅影响可读性。
+把这份项目记忆压缩到 4000 字以内
+检查并修正项目记忆中的冲突和过时信息
+按优先级重新整理未完成事项
