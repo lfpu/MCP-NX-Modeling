@@ -23,4 +23,5 @@ logs/
 .idea/
 .DS_Store
 .antcode/
+log/
 Thumbs.db
