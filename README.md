@@ -1,10 +1,12 @@
 # MCP-NX-Modeling
 
-![platedemo](plate.jpg)
+![platedemo](./images/plate.jpg)
 
 ```text
 LLM / Claude Code / AntCode  ->  MCP Server (Python)  ->  NX Adapter  ->  Siemens NX
 ```
+
+## 本项目兼容Claude Code 和 AntCode（[lfpu/AntCoode](https://github.com/lfpu/AntCode)）
 
 ## 阶段路线
 
@@ -170,7 +172,8 @@ $env:NX_MCP_NXBIN = 'C:\Program Files\Siemens\NX2412\NXBIN'
 #### AntCode
 
 在 AntCode 的 MCP Servers 中导入或添加本项目配置，启动/连接服务后确认能够看到 `NX-Modeling` 提供的 `nx_*` 工具。
-
+![MCP1](./images/mcp1.png)
+![MCP2](./images/mcp2.jpg)
 之后可以直接在 Chat 中输入自然语言任务，不需要自己写 Tool JSON。例如：
 
 ```text
