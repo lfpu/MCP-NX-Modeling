@@ -1,0 +1,2 @@
+# Works with mcp SDK v1.x (FastMCP) and v2.x (MCPServer); see nx_mcp/server.py
+mcp>=2.3.0

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "nx-modeling": {
+      "command": "python",
+      "args": ["C:/path/to/MCP-NX-Modeling/main.py"],
+      "env": {
+        "NX_MCP_NXBIN": "C:/Program Files/Siemens/NX2412/NXBIN",
+        "NX_MCP_PORT": "8765"
+      }
+    }
+  }
+}

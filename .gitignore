@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# NX generated Part files
+*.prt
+*.prt.*
+
+# Test/generated outputs
+phase0/output/
+examples/output/
+
+# Runtime logs and probe outputs
+logs/
+*.log
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
