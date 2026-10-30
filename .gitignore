@@ -22,4 +22,5 @@ logs/
 .vscode/
 .idea/
 .DS_Store
+.antcode/
 Thumbs.db
