@@ -544,3 +544,64 @@ python examples/smoke_native.py
 python scripts/test_remaining_features.py
 python scripts/test_assembly_constraints.py
 ```
+
+
+### 2026-10-30 基础建模接口修复与回归验证
+
+本轮针对球体、圆锥/圆台和非 XY 平面草图进行了 NX 2412 实机修复与验证。
+
+#### 修复内容
+
+- `nx_create_sphere`：`CreateSphereBuilder` 改用 `NXOpen.Features.Sphere.Null`。NX 2412 不接受通用的 `Feature.Null`。
+- `nx_create_cone`：`CreateConeBuilder` 改用 `NXOpen.Features.Cone.Null`。NX 2412 不接受通用的 `Feature.Null`。
+- `nx_create_sketch`：草图创建改用 `CreateSimpleSketchInPlaceBuilder()`，并通过 `Xform + CartesianCoordinateSystem` 显式传入草图的原点、U 轴和法向。
+- XY、YZ、XZ 三个标准平面现在都能按约定的局部坐标系创建草图：
+  - `xy`：u=X，v=Y，normal=+Z。
+  - `yz`：u=Y，v=Z，normal=+X。
+  - `xz`：u=X，v=Z，normal=-Y。
+- 圆和圆弧使用与草图局部坐标系一致的 NXMatrix，可在 XY、YZ、XZ 平面正确加入草图，不再出现 `Plane of arc must be parallel to sketch plane`。
+- 面上草图同样使用从目标平面计算出的原点和方向创建，但仍不与原始 Face 保持参数化关联。
+
+#### 新增专项回归测试
+
+`scripts/test_basic_primitives.py` 覆盖：
+
+- 直径 20 mm 球体，按理论体积校验真实实体。
+- 底径 20 mm、顶径 10 mm、高 30 mm 的圆台，按理论体积校验真实实体。
+- XY、YZ、XZ 三个标准平面分别创建一个圆和一个圆弧。
+- 每个草图通过 `nx_get_sketches` 确认包含 2 个真实草图几何对象。
+- 输出 Part 位于 `examples/output/basic_primitives/`，结果写入 `logs/basic_primitives_test.txt`。
+
+#### 本轮 NX 2412 实测结果
+
+以下检查和回归测试全部通过：
+
+```powershell
+python -m compileall -q nx_mcp nx_worker scripts examples
+python scripts/check_registry.py
+python scripts/test_basic_primitives.py
+python examples/smoke_test.py
+python examples/smoke_advanced.py
+python examples/smoke_native.py
+python scripts/test_sketch_constraints.py
+python scripts/test_remaining_features.py
+```
+
+验证范围包括：
+
+- 球体和圆台实体创建及体积校验。
+- XY、YZ、XZ 平面的圆和圆弧。
+- 底板、圆角、通孔、拉伸、切除和旋转。
+- 原生 Simple Through、Simple Blind、Counterbored、Countersink 孔。
+- 草图约束与尺寸。
+- 抽壳、镜像、线性/网格/圆形阵列。
+- 倒斜角。
+- STEP 导出与重新导入回环，导入前后体积均为 9216 mm³。
+- 360° 旋转体体积为 14074.3351 mm³。
+
+#### NX 2412 开发说明
+
+- 不要使用 `SketchInPlaceBuilder.PlaneReference` 是否赋值成功来判断草图方向正确。实测中该属性可以接受 `NXOpen.Plane`，但提交结果仍可能是世界 XY 草图。
+- 创建需要明确方向的草图时，当前稳定路径是：
+  `Point + X Direction + Z Direction -> Xform -> CartesianCoordinateSystem -> SimpleSketchInPlaceBuilder`。
+- 修改 `nx_worker/` 后必须停止旧 Worker，再进行实机验证。若 `run_journal.exe` 报告无法保留许可证，先检查并关闭残留的 `ugraf.exe`，等待许可证释放后重试。

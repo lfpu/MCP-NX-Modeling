@@ -80,7 +80,7 @@ def create_cone(base_diameter, top_diameter, height, origin=None, direction=None
     if td < 0:
         raise ctx.NxError('top_diameter 不能为负数')
     h = _pos('height', height)
-    builder = part.Features.CreateConeBuilder(NXOpen.Features.Feature.Null)
+    builder = part.Features.CreateConeBuilder(NXOpen.Features.Cone.Null)
     try:
         builder.Type = NXOpen.Features.ConeBuilder.Types.DiametersAndHeight
         builder.BaseDiameter.RightHandSide = ctx.num(bd)
@@ -98,7 +98,7 @@ def create_cone(base_diameter, top_diameter, height, origin=None, direction=None
 def create_sphere(diameter, center=None, boolean='create', target_body=None):
     part = ctx.work_part()
     d = _pos('diameter', diameter)
-    builder = part.Features.CreateSphereBuilder(NXOpen.Features.Feature.Null)
+    builder = part.Features.CreateSphereBuilder(NXOpen.Features.Sphere.Null)
     try:
         builder.Type = NXOpen.Features.SphereBuilder.Types.CenterPointAndDiameter
         builder.CenterPoint = part.Points.CreatePoint(ctx.pt(center))

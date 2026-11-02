@@ -89,15 +89,29 @@ def _commit_sketch(part, ref):
 
 
 def new_sketch(part, basis, face_obj):
-    # SketchInPlaceBuilder.PlaneReference needs a Plane object, not a Face: for a face we build a fixed
-    # datum plane from the face basis (origin/normal), so the sketch is not associative to the face.
-    errors = []
-    for maker in (_fixed_datum, _smart_plane):
+    # NX 2412: SketchInPlaceBuilder.PlaneReference may accept a Plane but still commit a world-XY sketch.
+    # SimpleSketchInPlaceBuilder + CartesianCoordinateSystem preserves the requested origin and u/v/n axes.
+    update = NXOpen.SmartObject.UpdateOption.WithinModeling
+    origin = part.Points.CreatePoint(ctx.pt(basis['origin']))
+    x_direction = part.Directions.CreateDirection(
+        ctx.pt(basis['origin']), ctx.vec(basis['u']), update)
+    z_direction = part.Directions.CreateDirection(
+        ctx.pt(basis['origin']), ctx.vec(basis['n']), update)
+    xform = part.Xforms.CreateXformByPointXDirZDir(
+        origin, x_direction, z_direction, update, 1.0)
+    coordinate_system = part.CoordinateSystems.CreateCoordinateSystem(xform, update)
+
+    builder = part.Sketches.CreateSimpleSketchInPlaceBuilder()
+    try:
+        builder.CoordinateSystem = coordinate_system
+        builder.UseWorkPartOrigin = False
+        builder.SketchOrigin = origin
+        return builder.Commit()
+    finally:
         try:
-            return _commit_sketch(part, maker(part, basis))
-        except Exception as exc:
-            errors.append('%s: %s' % (maker.__name__, exc))
-    raise ctx.NxError('创建草图平面失败: ' + ' | '.join(errors))
+            builder.Destroy()
+        except Exception:
+            pass
 
 
 def _uv(p, what='点'):
@@ -115,6 +129,8 @@ def _arc(part, basis, center_uv, radius, a0, a1):
         raise ctx.NxError('半径必须大于 0')
     m = NXOpen.Matrix3x3()
     u, v, n = basis['u'], basis['v'], basis['n']
+    # NX 2412 CreateArc expects local X/Y/Z axes as matrix rows.
+    # This matches the orientation committed by SimpleSketchInPlaceBuilder.
     m.Xx, m.Xy, m.Xz = u[0], u[1], u[2]
     m.Yx, m.Yy, m.Yz = v[0], v[1], v[2]
     m.Zx, m.Zy, m.Zz = n[0], n[1], n[2]
