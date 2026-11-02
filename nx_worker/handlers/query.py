@@ -92,11 +92,26 @@ def get_object_info(object_id):
     obj = ctx.get_obj(object_id)
     kind = ctx.kind_of(obj)
     if kind == 'FACE':
-        return {'kind': kind, 'face': geom.face_info(obj, with_area=True)}
+        info = geom.face_info(obj, with_area=True)
+        try:
+            info['color'] = int(obj.Color)
+        except Exception:
+            pass
+        return {'kind': kind, 'face': info}
     if kind == 'EDGE':
-        return {'kind': kind, 'edge': geom.edge_info(obj)}
+        info = geom.edge_info(obj)
+        try:
+            info['color'] = int(obj.Color)
+        except Exception:
+            pass
+        return {'kind': kind, 'edge': info}
     if kind == 'BODY':
-        return {'kind': kind, 'body': ctx.body_info(obj)}
+        info = ctx.body_info(obj)
+        try:
+            info['color'] = int(obj.Color)
+        except Exception:
+            pass
+        return {'kind': kind, 'body': info}
     if kind == 'FEATURE':
         info = ctx.feature_info(obj)
         try:

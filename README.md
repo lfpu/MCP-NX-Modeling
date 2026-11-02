@@ -605,3 +605,88 @@ python scripts/test_remaining_features.py
 - 创建需要明确方向的草图时，当前稳定路径是：
   `Point + X Direction + Z Direction -> Xform -> CartesianCoordinateSystem -> SimpleSketchInPlaceBuilder`。
 - 修改 `nx_worker/` 后必须停止旧 Worker，再进行实机验证。若 `run_journal.exe` 报告无法保留许可证，先检查并关闭残留的 `ugraf.exe`，等待许可证释放后重试。
+
+
+#### 2026-11-02 上色、直齿轮与螺纹孔扩展
+
+本轮在不重复实现已有 `nx_boolean` 的前提下，新增并验证了实体/面上色、外啮合直齿轮和螺纹孔能力。当前 MCP 层共有 68 个 Tool 调用，`scripts/check_registry.py` 已确认 Tool 与 Worker Handler 参数签名一致。
+
+##### 新增 Tool
+
+- `nx_color_bodies`
+  - 给一个或多个 `BODY` 上色。
+  - `color` 使用 NX 调色板索引 1~216。
+  - `apply_to_all_faces=true` 时覆盖实体所有面的颜色。
+  - 接入现有 Undo Mark、失败回滚和撤销历史。
+- `nx_color_faces`
+  - 只修改指定 `FACE` 的颜色，不影响其他面。
+  - `nx_get_object_info` 现在会为 Face、Edge 和 Body 返回可读取时的 `color` 字段，便于验证显示属性。
+- `nx_create_spur_gear`
+  - 参数包括 `module`、`teeth`、`width`、`pressure_angle`、`bore_diameter`、`center` 和 `name`。
+  - 当前通过闭合齿形草图一次拉伸生成一个真实齿轮实体，可同时生成中心孔。
+  - 返回节圆、基圆、齿顶圆和齿根圆直径等参数。
+- `nx_threaded_hole`
+  - 优先创建 NX 原生 `Threaded HolePackage`。
+  - 参数包括 `thread_standard`、`thread_size`、`tap_drill_diameter`、`hole_depth`、`thread_depth`、旋向和螺纹长度选项。
+  - `fallback=false` 时严格要求原生螺纹孔成功。
+  - `fallback=true` 时，如果 NX 安装缺少匹配的螺纹标准数据，会创建原生 Simple Hole 形式的攻丝底孔，并在返回结果中保留完整螺纹参数、设置 `native_thread=false`，同时返回明确的 `warning`，不会把底孔误报为原生螺纹孔。
+
+##### NX 2412 实机验证
+
+专项脚本：
+
+```powershell
+python scripts/test_new_modeling_features.py
+```
+
+完整结果保存在 `logs/new_modeling_features_test.txt`，生成文件包括：
+
+- `examples/output/color_test.prt`
+- `examples/output/spur_gear.prt`
+- `examples/output/threaded_hole.prt`
+
+验证结果：
+
+- 实体整体上色成功，颜色索引为 186。
+- 单面上色成功，颜色索引为 36，并通过 `nx_get_object_info` 重新读取确认。
+- M2、20 齿、齿宽 8 mm、中心孔 10 mm 的直齿轮成功生成一个真实实体。
+- 齿轮节圆直径为 40 mm，齿顶圆直径为 44 mm，齿根圆直径为 35 mm。
+- 齿轮实体包含 123 个面、362 条边，体积为 8558.2559 mm³，质心位于 `[0, 0, 4]`。
+- 螺纹孔操作成功生成攻丝底孔，实体体积从 48000.0 mm³ 降至 47715.2791 mm³。
+- `python -m compileall -q nx_mcp nx_worker scripts` 通过。
+- `python scripts/check_registry.py` 通过，结果为 `OK: tool <-> handler signatures are consistent`。
+
+##### 齿轮精度限制
+
+`nx_create_spur_gear` 当前使用六点近似渐开线兼容齿形，适合：
+
+- 概念建模。
+- 装配布局和干涉检查。
+- 外观展示。
+- 非制造级模型快速生成。
+
+当前齿形不是经过齿轮刀具展成计算的制造级精确渐开线。需要加工、啮合误差分析或齿面接触分析时，应使用精确渐开线、变位系数、齿顶修缘、根切和公差标准重新生成齿形。
+
+##### 螺纹标准数据限制
+
+当前测试机器的 NX 2412 能识别 `Metric Coarse` 标准名称，但无法找到匹配的 M6 螺纹数据。对常见标准名和规格字符串进行实机探测后，NX 均返回下列错误之一：
+
+- `Thread standard data not found. Check standards data installation.`
+- `Thread data not found. Specify different thread or edit standards data.`
+
+探测结果保存在：
+
+- `logs/thread_standard_probe.txt`
+- `logs/thread_standard_probe.json`
+
+因此，本机验证的是带完整螺纹参数语义和明确警告的攻丝底孔回退路径，而不是原生 `Threaded HolePackage` 成功路径。安装或配置正确的 NX 螺纹标准数据后，可使用 `fallback=false` 重新执行严格验证。
+
+##### 最终验证命令补充
+
+```powershell
+python scripts/stop_worker.py
+python -m compileall -q nx_mcp nx_worker scripts examples
+python scripts/check_registry.py
+python scripts/list_tools.py
+python scripts/test_new_modeling_features.py
+```

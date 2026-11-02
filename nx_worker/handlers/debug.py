@@ -2286,3 +2286,34 @@ def debug_simple_sketch_csystem(plane='yz', offset=4.0):
         if item.get('committed'):
             break
     return out
+
+
+@command('debug_color_thread_api', 'read')
+def debug_color_thread_api():
+    '''Inspect color and threaded-hole APIs without committing model changes.'''
+    part = ctx.work_part()
+    out = {}
+    b = part.Features.CreateHolePackageBuilder(NXOpen.Features.HolePackage.Null)
+    try:
+        names = [n for n in dir(b) if not n.startswith('_') and any(k in n.lower() for k in ('thread', 'tap', 'standard', 'size', 'type', 'depth'))]
+        out['hole_properties'] = {}
+        for name in names:
+            try:
+                value = getattr(b, name)
+                out['hole_properties'][name] = {'type': str(type(value)), 'value': str(value), 'members': [n for n in dir(value) if not n.startswith('_')][:60]}
+            except Exception as exc:
+                out['hole_properties'][name] = {'error': str(exc)}
+        out['hole_builder_enums'] = {}
+        for name in dir(NXOpen.Features.HolePackageBuilder):
+            if any(k in name.lower() for k in ('type', 'thread', 'tap')) and not name.startswith('_'):
+                value = getattr(NXOpen.Features.HolePackageBuilder, name)
+                out['hole_builder_enums'][name] = [n for n in dir(value) if not n.startswith('_')]
+    finally:
+        b.Destroy()
+    dm = ctx.session().DisplayManager.NewDisplayModification()
+    try:
+        out['display_modification'] = [n for n in dir(dm) if not n.startswith('_')]
+    finally:
+        dm.Dispose()
+    out['thread_factories'] = [n for n in dir(part.Features) if 'thread' in n.lower()]
+    return out
